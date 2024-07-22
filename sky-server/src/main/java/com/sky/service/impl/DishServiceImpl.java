@@ -8,10 +8,14 @@ import com.sky.dto.DishDTO;
 import com.sky.dto.DishPageQueryDTO;
 import com.sky.entity.Dish;
 import com.sky.entity.DishFlavor;
+import com.sky.entity.Setmeal;
 import com.sky.exception.DeletionNotAllowedException;
+import com.sky.exception.DishDisableFailedException;
+import com.sky.exception.SetmealEnableFailedException;
 import com.sky.mapper.DishFlavorMapper;
 import com.sky.mapper.DishMapper;
 import com.sky.mapper.SetmealDishMapper;
+import com.sky.mapper.SetmealMapper;
 import com.sky.result.PageResult;
 import com.sky.result.Result;
 import com.sky.service.DishService;
@@ -26,6 +30,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -39,6 +44,9 @@ public class DishServiceImpl implements DishService {
 
     @Autowired
     private SetmealDishMapper setmealDishMapper;
+
+    @Autowired
+    private SetmealMapper setmealMapper;
 
     /**
      * 新增菜品和对应的口味
@@ -139,6 +147,33 @@ public class DishServiceImpl implements DishService {
     public List<Dish> listBycategoryId(Long categoryId) {
         List<Dish> list = dishMapper.getByCategoryId(categoryId);
         return list;
+    }
+
+    /**
+     * 菜品起售、停售
+     * @param status
+     * @param id
+     */
+    public void startOrStop(Integer status, Long id) {
+        //停售菜品时，判断是否有套餐包含菜品 该套餐是否正在售卖 如果正在售卖提示"有正在售卖的套餐包含菜品 无法停售"
+        if(status != StatusConstant.ENABLE){
+            //select a.* from dish a left join setmeal_dish b on a.id = b.dish_id where b.setmeal_id = ?
+            List<Long> ids = new ArrayList<>();
+            ids.add(id);
+            List<Long> setmealIdsByDishIds = setmealDishMapper.getSetmealIdsByDishIds(ids);
+            if (!setmealIdsByDishIds.isEmpty()) {
+                for (Long setmealIdsByDishId : setmealIdsByDishIds) {
+                    if (setmealMapper.getById(setmealIdsByDishId).getStatus() == StatusConstant.ENABLE) {
+                        throw new DishDisableFailedException(MessageConstant.DISH_BE_RELATED_BY_SETMEAL);
+                    }
+                }
+            }
+        }
+
+        Dish dish = dishMapper.getById(id);
+        dish.setStatus(status);
+        dishMapper.update(dish);
+
     }
 
 
